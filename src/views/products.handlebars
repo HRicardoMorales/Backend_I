@@ -1,0 +1,37 @@
+<h1>Productos</h1>
+
+<p class="hint">Usá ?page, ?limit, ?sort=asc|desc, ?query=category:Perifericos o status:true</p>
+
+<div class="grid">
+    {{#each products}}
+    <div class="card">
+        <h3>{{this.title}}</h3>
+        <p class="muted">${{this.price}} · <span class="pill">{{this.category}}</span></p>
+        <p>Stock: {{this.stock}} · Estado: {{#if this.status}}Activo{{else}}Inactivo{{/if}}</p>
+        <div class="row">
+            <a class="btn" href="/products/{{this._id}}{{#if ../cid}}?cid={{../cid}}{{/if}}">Ver detalle</a>
+            <button class="btn outline add-btn" data-pid="{{this._id}}">Agregar al carrito</button>
+        </div>
+    </div>
+    {{/each}}
+</div>
+
+<div class="pagination">
+    {{#if prevLink}}<a class="btn" href="{{prevLink}}">⬅️ Anterior</a>{{/if}}
+    <span>Página {{page}} de {{totalPages}}</span>
+    {{#if nextLink}}<a class="btn" href="{{nextLink}}">Siguiente ➡️</a>{{/if}}
+</div>
+
+<script>
+    const url = new URL(location.href);
+    const cid = url.searchParams.get('cid');
+    document.querySelectorAll('.add-btn').forEach(btn => {
+        btn.addEventListener('click', async () => {
+            if (!cid) return alert('Falta cid en la URL. Creá un carrito y agregá ?cid=<id> a la URL.');
+            const pid = btn.dataset.pid;
+            const res = await fetch(`/api/carts/${cid}/product/${pid}`, { method: 'POST' });
+            if (res.ok) alert('Agregado!');
+            else alert('Error al agregar');
+        });
+    });
+</script>

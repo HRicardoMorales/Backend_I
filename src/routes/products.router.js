@@ -1,62 +1,100 @@
 const express = require('express');
-const fs = require('fs');
-const path = require('path');
+const Product = require('../models/product.model');
 const router = express.Router();
 
-const productsPath = path.join(__dirname, '../data/products.json');
+router.get('/', async (req, res) => {
+    try {
+        const { limit = 10, page = 1, sort, query } = req.query;
 
-function getAllProducts() {
-    if (!fs.existsSync(productsPath)) return [];
-    const data = fs.readFileSync(productsPath, 'utf-8');
-    return JSON.parse(data);
-}
+        const filter = {};
+        if (query) {
+            const [key, value] = String(query).split(':');
+            if (key && value !== undefined) {
+                if (key === 'status') filter.status = value === 'true';
+                else if (key === 'category') filter.category = value;
+                else filter.title = { $regex: query, $options: 'i' };
+            } else {
+                filter.title = { $regex: query, $options: 'i' };
+            }
+        }
 
-function saveProducts(products) {
-    fs.writeFileSync(productsPath, JSON.stringify(products, null, 2));
-}
+        let sortOption = {};
+        if (sort === 'asc') sortOption.price = 1;
+        if (sort === 'desc') sortOption.price = -1;
 
-function validateProduct(req, res, next) {
-    const { title, price } = req.body;
+        const options = {
+            page: Number(page),
+            limit: Number(limit),
+            sort: Object.keys(sortOption).length ? sortOption : undefined,
+            lean: true
+        };
 
-    if (!title || price == null) {
-        return res.status(400).json({ error: 'Faltan campos obligatorios: title o price' });
+        const result = await Product.paginate(filter, options);
+
+        const baseUrl = `${req.protocol}://${req.get('host')}${req.baseUrl}`;
+        const link = (p) =>
+            `${baseUrl}?page=${p}&limit=${options.limit}` +
+            (sort ? `&sort=${sort}` : '') +
+            (query ? `&query=${encodeURIComponent(query)}` : '');
+
+        res.json({
+            status: 'success',
+            payload: result.docs,
+            totalPages: result.totalPages,
+            prevPage: result.prevPage,
+            nextPage: result.nextPage,
+            page: result.page,
+            hasPrevPage: result.hasPrevPage,
+            hasNextPage: result.hasNextPage,
+            prevLink: result.hasPrevPage ? link(result.prevPage) : null,
+            nextLink: result.hasNextPage ? link(result.nextPage) : null
+        });
+    } catch (err) {
+        res.status(500).json({ status: 'error', error: err.message });
     }
-
-    if (typeof title !== 'string') {
-        return res.status(400).json({ error: 'El campo "title" debe ser un string' });
-    }
-
-    if (typeof price !== 'number' || isNaN(price)) {
-        return res.status(400).json({ error: 'El campo "price" debe ser un número' });
-    }
-
-    const allowedFields = ['title', 'price'];
-    const extraFields = Object.keys(req.body).filter(k => !allowedFields.includes(k));
-    if (extraFields.length > 0) {
-        return res.status(400).json({ error: `Campos no permitidos: ${extraFields.join(', ')}` });
-    }
-
-    next();
-}
-
-router.get('/', (req, res) => {
-    const products = getAllProducts();
-    res.json(products);
 });
 
-router.post('/', validateProduct, (req, res) => {
-    const products = getAllProducts();
-    products.push(req.body);
-    saveProducts(products);
-    res.status(201).json({ message: 'Producto creado' });
+router.get('/:pid', async (req, res) => {
+    try {
+        const p = await Product.findById(req.params.pid).lean();
+        if (!p) return res.status(404).json({ status: 'error', error: 'Producto no encontrado' });
+        res.json({ status: 'success', payload: p });
+    } catch {
+        res.status(400).json({ status: 'error', error: 'ID inválido' });
+    }
 });
 
-router.delete('/:title', (req, res) => {
-    let products = getAllProducts();
-    const { title } = req.params;
-    products = products.filter(p => p.title !== title);
-    saveProducts(products);
-    res.json({ message: 'Producto eliminado' });
+router.post('/', async (req, res) => {
+    try {
+        const { title, description, code, price, status, stock, category, thumbnails } = req.body;
+        if (!title || !code || price == null) {
+            return res.status(400).json({ status: 'error', error: 'title, code y price son obligatorios' });
+        }
+        const created = await Product.create({ title, description, code, price, status, stock, category, thumbnails });
+        res.status(201).json({ status: 'success', payload: created });
+    } catch (err) {
+        res.status(400).json({ status: 'error', error: err.message });
+    }
+});
+
+router.put('/:pid', async (req, res) => {
+    try {
+        const updated = await Product.findByIdAndUpdate(req.params.pid, req.body, { new: true }).lean();
+        if (!updated) return res.status(404).json({ status: 'error', error: 'Producto no encontrado' });
+        res.json({ status: 'success', payload: updated });
+    } catch {
+        res.status(400).json({ status: 'error', error: 'ID inválido' });
+    }
+});
+
+router.delete('/:pid', async (req, res) => {
+    try {
+        const del = await Product.findByIdAndDelete(req.params.pid).lean();
+        if (!del) return res.status(404).json({ status: 'error', error: 'Producto no encontrado' });
+        res.json({ status: 'success', payload: del });
+    } catch {
+        res.status(400).json({ status: 'error', error: 'ID inválido' });
+    }
 });
 
 module.exports = router;

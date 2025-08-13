@@ -1,0 +1,14 @@
+<h1>Carrito {{cid}}</h1>
+
+{{#if items.length}}
+<ul>
+    {{#each items}}
+    <li>{{title}} — ${{price}} × {{quantity}} = ${{subtotal}}</li>
+    {{/each}}
+</ul>
+<h3>Total: ${{total}}</h3>
+{{else}}
+<p>El carrito está vacío.</p>
+{{/if}}
+
+<p><a class="btn" href="/products?cid={{cid}}">⬅️ Volver a productos</a></p>
